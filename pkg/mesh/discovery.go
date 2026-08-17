@@ -13,7 +13,7 @@ import (
 )
 
 const (
-    DefaultMeshPort = 9090
+    DefaultMeshPort = 9091
     BroadcastAddr   = "255.255.255.255:9090"
 )
 

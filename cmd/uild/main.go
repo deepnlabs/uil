@@ -46,7 +46,7 @@ func main() {
 	    }
 
 	    // 2. Mesh Network UDP Gossip
-	meshNetwork, err := mesh.NewNodeMesh(9090, func(remoteEnv uil.UILEnvelope) {
+	meshNetwork, err := mesh.NewNodeMesh(9091, func(remoteEnv uil.UILEnvelope) {
 	    if remoteEnv.ImportanceScore >= 0.9 {
 	        fmt.Printf("\n🚨 [REMOTE MESH ALERT] High-priority interlock breach from [%s]! SHA3: %s\n",
 	            remoteEnv.SourceNode, remoteEnv.ProofCommitment[:12])
