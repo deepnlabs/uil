@@ -14,9 +14,19 @@ import (
 	"github.com/deepnlabs/uil/pkg/mesh"
 	"github.com/deepnlabs/uil/pkg/substrate"
 	"github.com/deepnlabs/uil/pkg/uil"
+	"github.com/deepnlabs/uil/internal/mesh"
+
 )
 
 func main() {
+	if config.Mesh.Enabled {
+	    m, err := mesh.NewMesh(config.Mesh.Port)
+	    if err != nil {
+	        log.Fatalf("mesh: failed to start: %v", err)
+	    }
+	    m.Start()
+	}
+
 	if len(os.Args) < 2 {
 		printHelp()
 		os.Exit(1)
