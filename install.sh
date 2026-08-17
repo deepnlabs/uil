@@ -24,16 +24,16 @@ sudo mkdir -p /etc/uil
 sudo mkdir -p /var/lib/uild/plugins
 sudo mkdir -p /usr/local/bin
 
-# 3. Obtain Binary (Local copy vs. GitHub Release download)
+# 3. Obtain Binary
 if [ -f "./bin/uild" ]; then
-    echo "=> Installing locally compiled binary..."
+    echo "=> Installing locally compiled binary from ./bin/uild..."
     sudo cp ./bin/uild /usr/local/bin/uild
-elif [ -f "Makefile" ]; then
+elif [ -f "./Makefile" ]; then
     echo "=> Compiling from local source..."
     make all
     sudo cp ./bin/uild /usr/local/bin/uild
 else
-    echo "=> Downloading pre-compiled $VERSION binary ($TARGET_ARCH) from GitHub Releases..."
+    echo "=> Downloading pre-compiled $VERSION release binary ($TARGET_ARCH) from GitHub..."
     TARBALL="uild-${VERSION}-alpha-linux-${TARGET_ARCH}.tar.gz"
     URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
     
