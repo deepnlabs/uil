@@ -6,6 +6,7 @@ import (
     "fmt"
     "net"
     "sync"
+    "syscall"
     "time"
 
     "github.com/deepnlabs/uil/pkg/uil"
@@ -50,6 +51,14 @@ func NewNodeMesh(port int, handler func(env uil.UILEnvelope)) (*NodeMesh, error)
     conn, err := net.ListenUDP("udp", addr)
     if err != nil {
         return nil, fmt.Errorf("failed to listen on UDP port %d: %w", port, err)
+    }
+
+    // Enable UDP broadcast (critical fix)
+    rawConn, err := conn.SyscallConn()
+    if err == nil {
+        rawConn.Control(func(fd uintptr) {
+            syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
+        })
     }
 
     mesh := &NodeMesh{
