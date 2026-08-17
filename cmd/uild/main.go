@@ -46,20 +46,24 @@ func main() {
 	    }
 
 	    // 2. Mesh Network UDP Gossip
-	    meshNetwork, err := mesh.NewNodeMesh(9090, func(remoteEnv uil.UILEnvelope) {
-	        if remoteEnv.ImportanceScore >= 0.9 {
-	            fmt.Printf("\n🚨 [REMOTE MESH ALERT] High-priority interlock breach from [%s]! SHA3: %s\n",
-	                remoteEnv.SourceNode, remoteEnv.ProofCommitment[:12])
-	        }
-	    })
-
-	    if err == nil {
-	        defer meshNetwork.Close()
-	        meshNetwork.Start(ctx)
-	        fmt.Println("  └─ [MESH NETWORK] UDP Peer Discovery Active on Port 9090")
+	meshNetwork, err := mesh.NewNodeMesh(9090, func(remoteEnv uil.UILEnvelope) {
+	    if remoteEnv.ImportanceScore >= 0.9 {
+	        fmt.Printf("\n🚨 [REMOTE MESH ALERT] High-priority interlock breach from [%s]! SHA3: %s\n",
+	            remoteEnv.SourceNode, remoteEnv.ProofCommitment[:12])
 	    }
+	})
 
-	    // 3. Register Hardware Substrates
+	if err != nil {
+	    fmt.Printf("  └─ [MESH NETWORK] FAILED to start: %v\n", err)
+	    meshNetwork = nil
+	} else {
+	    defer meshNetwork.Close()
+	    meshNetwork.Start(ctx)
+	    fmt.Println("  └─ [MESH NETWORK] UDP Peer Discovery Active on Port 9090")
+	}
+
+
+	// 3. Register Hardware Substrates
     	var drivers []substrate.SubstrateDriver
     	nativeDriver := substrate.NewLinuxHardwareDriver(80.0)
     	if err := nativeDriver.Initialize(ctx, nil); err == nil {
