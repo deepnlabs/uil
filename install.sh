@@ -38,7 +38,7 @@ else
     # Query GitHub API for the direct asset URL matching our architecture
     DOWNLOAD_URL=$(curl -s https://api.github.com/repos/${REPO}/releases | \
       grep "browser_download_url" | \
-      grep "linux-${TARGET_ARCH}.tar.gz" | \
+      grep -E "uild-v[0-9]+\.[0-9]+\.[0-9]+.*-linux-${TARGET_ARCH}\.tar\.gz"
       head -n 1 | \
       cut -d '"' -f 4)
 
