@@ -34,12 +34,28 @@ elif [ -f "./Makefile" ]; then
     sudo cp ./bin/uild /usr/local/bin/uild
 else
     echo "=> Downloading pre-compiled $VERSION release binary ($TARGET_ARCH) from GitHub..."
-    TARBALL="uild-${VERSION}-alpha-linux-${TARGET_ARCH}.tar.gz"
-    URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL}"
-    
     TMP_DIR=$(mktemp -d)
-    curl -sSL "$URL" -o "${TMP_DIR}/${TARBALL}"
-    tar -xzf "${TMP_DIR}/${TARBALL}" -C "${TMP_DIR}"
+    
+    # Candidate filenames (handling both -alpha and release naming)
+    TARBALL_1="uild-${VERSION}-alpha-linux-${TARGET_ARCH}.tar.gz"
+    TARBALL_2="uild-${VERSION}-linux-${TARGET_ARCH}.tar.gz"
+    
+    URL_1="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL_1}"
+    URL_2="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL_2}"
+
+    # Try downloading candidate 1, fall back to candidate 2 (-f flag catches HTTP errors)
+    if curl -sSLf "$URL_1" -o "${TMP_DIR}/archive.tar.gz" 2>/dev/null; then
+        echo "=> Downloaded ${TARBALL_1}"
+    elif curl -sSLf "$URL_2" -o "${TMP_DIR}/archive.tar.gz" 2>/dev/null; then
+        echo "=> Downloaded ${TARBALL_2}"
+    else
+        echo "❌ Failed to download release asset for ${TARGET_ARCH} from ${VERSION} release."
+        echo "   Please check asset names at https://github.com/${REPO}/releases/tag/${VERSION}"
+        rm -rf "${TMP_DIR}"
+        exit 1
+    fi
+
+    tar -xzf "${TMP_DIR}/archive.tar.gz" -C "${TMP_DIR}"
     sudo cp "${TMP_DIR}/uild" /usr/local/bin/uild
     rm -rf "${TMP_DIR}"
 fi
