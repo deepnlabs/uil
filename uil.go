@@ -1,25 +1,32 @@
 package uil
 
 import (
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
+
+	"golang.org/x/crypto/sha3"
 )
 
 const (
-	// ProtocolVersion defines the current UIL specification version
-	ProtocolVersion = "UIP-1.0-CDID"
+	// ProtocolVersion defines the current UIL specification version for v0.5
+	ProtocolVersion = "UIP-0.5-PQ"
 
 	// Substrate Targets
-	SubstrateAuto        = "SUBSTRATE_AUTO"
+	SubstrateAuto         = "SUBSTRATE_AUTO"
 	SubstrateRadeonVulkan = "RADEON_840M_VULKAN"
 	SubstrateNvidiaCUDA   = "NVIDIA_RTX_CUDA"
-	SubstrateHailoNPU    = "HAILO8_NPU"
-	SubstrateMemryXNPU   = "MEMRYX_NPU"
-	SubstrateXDNA2NPU    = "AMD_XDNA2_NPU"
+	SubstrateHailoNPU     = "HAILO8_NPU"
+	SubstrateMemryXNPU    = "MEMRYX_NPU"
+	SubstrateXDNA2NPU     = "AMD_XDNA2_NPU"
+
+	// Cryptographic Hash Algorithms
+	HashAlgSHA3_256 = "SHA3-256"
+	HashAlgSHA3_512 = "SHA3-512"
+	HashAlgBLAKE3   = "BLAKE3"
 )
 
 // UILEnvelope defines the standardized message container across the UIL Mesh.
@@ -31,7 +38,9 @@ type UILEnvelope struct {
 	Timestamp       string                 `json:"timestamp"`
 	ImportanceScore float64                `json:"importance_score"`
 	SubstrateTarget string                 `json:"substrate_target"`
+	HashAlg         string                 `json:"hash_alg"`
 	ProofCommitment string                 `json:"proof_commitment,omitempty"`
+	PQSignature     string                 `json:"pq_signature,omitempty"` // Base64 Dilithium/SPHINCS+ sig
 	Payload         map[string]interface{} `json:"payload"`
 }
 
@@ -45,9 +54,10 @@ func NewEnvelope(sourceNode, targetNode, substrate string, payload map[string]in
 		EnvelopeID:      fmt.Sprintf("uil-env-%d", time.Now().UnixNano()),
 		SourceNode:      sourceNode,
 		TargetNode:      targetNode,
-		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+		Timestamp:       time.Now().UTC().Format(time.RFC3339Nano),
 		ImportanceScore: 1.0,
 		SubstrateTarget: substrate,
+		HashAlg:         HashAlgSHA3_256, // Default to SHA3 for PQ resilience
 		Payload:         payload,
 	}
 }
@@ -72,12 +82,21 @@ func (e *UILEnvelope) Validate() error {
 	return nil
 }
 
-// ComputePayloadHash calculates a deterministic SHA-256 hash of the payload for proof verification.
+// ComputePayloadHash calculates a deterministic hash using the configured algorithm (SHA3-256 / SHA3-512).
 func (e *UILEnvelope) ComputePayloadHash() (string, error) {
 	bytesData, err := json.Marshal(e.Payload)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal payload for hashing: %w", err)
 	}
-	hash := sha256.Sum256(bytesData)
-	return hex.EncodeToString(hash[:]), nil
+
+	switch e.HashAlg {
+	case HashAlgSHA3_256, "":
+		hash := sha3.Sum256(bytesData)
+		return hex.EncodeToString(hash[:]), nil
+	case HashAlgSHA3_512:
+		hash := sha3.Sum512(bytesData)
+		return hex.EncodeToString(hash[:]), nil
+	default:
+		return "", fmt.Errorf("unsupported hash algorithm: %s", e.HashAlg)
+	}
 }
