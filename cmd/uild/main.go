@@ -134,14 +134,16 @@ func main() {
         	        env.ImportanceScore = 0.1
         	    }
 
-        	    // Broadcast state over P2P mesh
-        	    if meshNetwork != nil {
-        	        _ = meshNetwork.BroadcastGossip(env)
-        	    }
-	
-        	    peers := meshNetwork.GetActivePeers()
-        	    fmt.Printf("[%s] Tick | Temp: %.1f°C | Mesh Peers: %d | SHA3: %s\n",
-        	        time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], len(peers), hash[:12])
+		    // Broadcast state over P2P mesh
+		    if meshNetwork != nil {
+		        _ = meshNetwork.BroadcastGossip(env)
+		        peers := meshNetwork.GetActivePeers()
+    			fmt.Printf("[%s] Tick | Temp: %.1f°C | Mesh Peers: %d | SHA3: %s\n",
+        			time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], len(peers), hash[:12])
+		    } else {
+    			fmt.Printf("[%s] Tick | Temp: %.1f°C | Mesh Peers: N/A | SHA3: %s\n",
+        		time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], hash[:12])
+		    }
         	}
     	}
 
