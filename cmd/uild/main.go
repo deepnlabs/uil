@@ -11,6 +11,7 @@ import (
 
 	"github.com/deepnlabs/uil/pkg/bridge"
 	"github.com/deepnlabs/uil/pkg/crypto"
+	"github.com/deepnlabs/uil/pkg/mesh"
 	"github.com/deepnlabs/uil/pkg/substrate"
 	"github.com/deepnlabs/uil/pkg/uil"
 )
@@ -30,51 +31,56 @@ func main() {
 		fmt.Println("Initialization complete.")
 
 	case "run":
-		fmt.Println("Starting UIL-X Hardware Governance Daemon (`uild`) v0.8-alpha...")
-
-		// 1. Initialize IPC Socket Emitter (/tmp/uild.sock for user-space access)
-		socketBridge, err := bridge.NewBridgeEmitter()
-		if err != nil {
-			fmt.Printf("  └─ [WARN] Failed to bind IPC socket /tmp/uild.sock: %v\n", err)
-		} else {
-			defer socketBridge.Close()
-			fmt.Println("  └─ [IPC BRIDGE] Listening on Unix socket /tmp/uild.sock")
-		}
+		nodeID := "deepn-node-2" // Host Node Identifier
+		fmt.Printf("Starting UIL-X Hardware Governance Daemon (`uild`) v0.8-alpha on [%s]...\n", nodeID)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		var drivers []substrate.SubstrateDriver
+		// 1. Local Unix Socket Bridge
+		socketBridge, _ := bridge.NewBridgeEmitter()
+		if socketBridge != nil {
+			defer socketBridge.Close()
+			fmt.Println("  └─ [IPC BRIDGE] Listening on Unix socket /tmp/uild.sock")
+		}
 
-		// 2. Register Native Linux Thermal Driver
+		// 2. Mesh Network UDP Gossip
+		meshNetwork, err := mesh.NewNodeMesh(nodeID, 9090, func(remoteEnv uil.UILEnvelope) {
+			if remoteEnv.ImportanceScore >= 0.9 {
+				fmt.Printf("\n🚨 [REMOTE MESH ALERT] High-priority interlock breach from [%s]! SHA3: %s\n",
+					remoteEnv.SourceNode, remoteEnv.ProofCommitment[:12])
+			}
+		})
+
+		if err == nil {
+			defer meshNetwork.Close()
+			meshNetwork.Start(ctx)
+			fmt.Println("  └─ [MESH NETWORK] UDP Peer Discovery Active on Port 9090")
+		}
+
+		// 3. Register Hardware Substrates
+		var drivers []substrate.SubstrateDriver
 		nativeDriver := substrate.NewLinuxHardwareDriver(80.0)
 		if err := nativeDriver.Initialize(ctx, nil); err == nil {
 			drivers = append(drivers, nativeDriver)
 			fmt.Printf("  └─ [NATIVE] Registered %s (%s)\n", nativeDriver.Name(), nativeDriver.ID())
 		}
 
-		// 3. Scan & Load Dynamic Plugins
-		pluginDir := "./plugins"
-		files, err := filepath.Glob(filepath.Join(pluginDir, "*.so"))
-		if err == nil && len(files) > 0 {
-			for _, file := range files {
-				drv, err := substrate.LoadPlugin(file)
-				if err != nil {
-					continue
-				}
-				if err := drv.Initialize(ctx, nil); err == nil {
-					drivers = append(drivers, drv)
-					fmt.Printf("  └─ [PLUGIN] Loaded %s (%s)\n", drv.Name(), drv.ID())
-				}
+		// Load Dynamic Plugins
+		files, _ := filepath.Glob("./plugins/*.so")
+		for _, file := range files {
+			drv, err := substrate.LoadPlugin(file)
+			if err == nil && drv.Initialize(ctx, nil) == nil {
+				drivers = append(drivers, drv)
+				fmt.Printf("  └─ [PLUGIN] Loaded %s (%s)\n", drv.Name(), drv.ID())
 			}
 		}
 
-		// 4. Setup Signal Interception for Clean Daemon Shutdown
+		// 4. Signal Interception
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-		// 5. Continuous Governance Execution Loop (Runs every 1 second)
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 
 		hasher := crypto.NewSHA3Hasher("SHA3-256")
@@ -88,35 +94,48 @@ func main() {
 
 			case <-ticker.C:
 				liveMetrics := make(map[string]float64)
+				anyBreach := false
+
 				for _, drv := range drivers {
-					breach, err := drv.EvaluateInterlock(liveMetrics)
-					if err != nil {
-						continue
-					}
-
-					// Broadcast safety state over IPC socket
-					if socketBridge != nil {
-						socketBridge.BroadcastBreach(bridge.SafetyEvent{
-							InterlockID: drv.ID(),
-							Breach:      breach,
-							Timestamp:   time.Now().Unix(),
-							Metrics:     liveMetrics,
-						})
-					}
-
+					breach, _ := drv.EvaluateInterlock(liveMetrics)
 					if breach {
-						fmt.Printf("[%s] 🚨 SAFETY INTERLOCK BREACH on %s!\n", time.Now().Format("15:04:05"), drv.ID())
+						anyBreach = true
+						fmt.Printf("[%s] 🚨 SAFETY BREACH on local substrate %s!\n", time.Now().Format("15:04:05"), drv.ID())
 					}
 				}
 
-				// Compute SHA3 commitment for current tick state
-				env := uil.NewEnvelope("deepn-node-2", "broadcast", uil.SubstrateAuto, map[string]interface{}{
-					"telemetry": liveMetrics,
+				// Local IPC Broadcast
+				if socketBridge != nil {
+					socketBridge.BroadcastBreach(bridge.SafetyEvent{
+						InterlockID: "local-aggregate",
+						Breach:      anyBreach,
+						Timestamp:   time.Now().Unix(),
+						Metrics:     liveMetrics,
+					})
+				}
+
+				// Compute $UPFo$ SHA3 State Commitment
+				env := uil.NewEnvelope(nodeID, "broadcast", uil.SubstrateAuto, map[string]interface{}{
+					"cpu_temp": liveMetrics["cpu_temp_celsius"],
+					"breach":   anyBreach,
 				})
 				hash, _ := hasher.HashPayload(env.Payload)
+				env.ProofCommitment = hash
 
-				fmt.Printf("[%s] Tick | CPU Temp: %.1f°C | SHA3: %s\n",
-					time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], hash[:12])
+				if anyBreach {
+					env.ImportanceScore = 1.0 // High priority safety event
+				} else {
+					env.ImportanceScore = 0.1
+				}
+
+				// Broadcast state over P2P mesh
+				if meshNetwork != nil {
+					_ = meshNetwork.BroadcastGossip(env)
+				}
+
+				peers := meshNetwork.GetActivePeers()
+				fmt.Printf("[%s] Tick | Temp: %.1f°C | Mesh Peers: %d | SHA3: %s\n",
+					time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], len(peers), hash[:12])
 			}
 		}
 
@@ -132,4 +151,3 @@ func printHelp() {
 	fmt.Println("UIL-X Hardware Governance Daemon (uild)")
 	fmt.Println("Usage: uild [init|run|status]")
 }
-
