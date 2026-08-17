@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-VERSION="v0.8.0"
 REPO="deepnlabs/uil"
 
 echo "--------------------------------------------------------"
@@ -33,28 +32,23 @@ elif [ -f "./Makefile" ]; then
     make all
     sudo cp ./bin/uild /usr/local/bin/uild
 else
-    echo "=> Downloading pre-compiled $VERSION release binary ($TARGET_ARCH) from GitHub..."
+    echo "=> Resolving pre-compiled release binary for ${TARGET_ARCH} from GitHub..."
     TMP_DIR=$(mktemp -d)
     
-    # Candidate filenames (handling both -alpha and release naming)
-    TARBALL_1="uild-${VERSION}-alpha-linux-${TARGET_ARCH}.tar.gz"
-    TARBALL_2="uild-${VERSION}-linux-${TARGET_ARCH}.tar.gz"
-    
-    URL_1="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL_1}"
-    URL_2="https://github.com/${REPO}/releases/download/${VERSION}/${TARBALL_2}"
+    # Query GitHub API for the direct asset URL matching our architecture
+    DOWNLOAD_URL=$(curl -s https://api.github.com/repos/${REPO}/releases | \
+      grep "browser_download_url" | \
+      grep "linux-${TARGET_ARCH}.tar.gz" | \
+      head -n 1 | \
+      cut -d '"' -f 4)
 
-    # Try downloading candidate 1, fall back to candidate 2 (-f flag catches HTTP errors)
-    if curl -sSLf "$URL_1" -o "${TMP_DIR}/archive.tar.gz" 2>/dev/null; then
-        echo "=> Downloaded ${TARBALL_1}"
-    elif curl -sSLf "$URL_2" -o "${TMP_DIR}/archive.tar.gz" 2>/dev/null; then
-        echo "=> Downloaded ${TARBALL_2}"
-    else
-        echo "❌ Failed to download release asset for ${TARGET_ARCH} from ${VERSION} release."
-        echo "   Please check asset names at https://github.com/${REPO}/releases/tag/${VERSION}"
-        rm -rf "${TMP_DIR}"
+    if [ -z "$DOWNLOAD_URL" ]; then
+        echo "❌ Could not find a release asset matching linux-${TARGET_ARCH}.tar.gz on GitHub."
         exit 1
     fi
 
+    echo "=> Downloading: ${DOWNLOAD_URL}"
+    curl -sSL "$DOWNLOAD_URL" -o "${TMP_DIR}/archive.tar.gz"
     tar -xzf "${TMP_DIR}/archive.tar.gz" -C "${TMP_DIR}"
     sudo cp "${TMP_DIR}/uild" /usr/local/bin/uild
     rm -rf "${TMP_DIR}"
@@ -65,10 +59,7 @@ sudo chmod +x /usr/local/bin/uild
 # 4. Install Default Configuration
 if [ ! -f "/etc/uil/config.json" ]; then
     echo "=> Writing default configuration to /etc/uil/config.json..."
-    if [ -f "./config/config.json" ]; then
-        sudo cp ./config/config.json /etc/uil/config.json
-    else
-        sudo tee /etc/uil/config.json > /dev/null << 'EOF'
+    sudo tee /etc/uil/config.json > /dev/null << 'EOF'
 {
   "node_id": "auto",
   "log_level": "info",
@@ -83,7 +74,6 @@ if [ ! -f "/etc/uil/config.json" ]; then
   }
 }
 EOF
-    fi
 fi
 
 # 5. Install Systemd Service Unit
