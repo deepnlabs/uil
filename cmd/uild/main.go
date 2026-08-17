@@ -59,7 +59,7 @@ func main() {
 	} else {
 	    defer meshNetwork.Close()
 	    meshNetwork.Start(ctx)
-	    fmt.Println("  └─ [MESH NETWORK] UDP Peer Discovery Active on Port 9090")
+	    fmt.Println("  └─ [MESH NETWORK] UDP Peer Discovery Active on Port 9091")
 	}
 
 
