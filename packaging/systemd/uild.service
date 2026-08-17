@@ -1,0 +1,21 @@
+[Unit]
+Description=UIL-X Hardware Governance Daemon (uild)
+Documentation=https://github.com/deepnlabs/uil
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/uild run
+Restart=always
+RestartSec=3s
+
+# Environmental Hardening
+ProtectSystem=full
+PrivateTmp=false
+WorkingDirectory=/var/lib/uild
+
+[Install]
+WantedBy=multi-user.target
