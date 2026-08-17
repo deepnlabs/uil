@@ -36,11 +36,9 @@ else
     TMP_DIR=$(mktemp -d)
     
     # Query GitHub API for the direct asset URL matching our architecture
-    DOWNLOAD_URL=$(curl -s https://api.github.com/repos/${REPO}/releases | \
-      grep "browser_download_url" | \
-      grep -E "uild-v[0-9]+\.[0-9]+\.[0-9]+.*-linux-${TARGET_ARCH}\.tar\.gz"
-      head -n 1 | \
-      cut -d '"' -f 4)
+DOWNLOAD_URL=$(curl -s https://api.github.com/repos/${REPO}/releases \
+  | jq -r ".[] | .assets[] | select(.name | contains(\"linux-${TARGET_ARCH}.tar.gz\")) | .browser_download_url" \
+  | head -n 1)
 
     if [ -z "$DOWNLOAD_URL" ]; then
         echo "❌ Could not find a release asset matching linux-${TARGET_ARCH}.tar.gz on GitHub."
