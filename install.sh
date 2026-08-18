@@ -37,13 +37,12 @@ echo "=> Downloading signature: ${SIG_URL}"
 curl -sSL "$SIG_URL" -o "${TMP_DIR}/archive.minisig"
 
 # UIL Minisign public key (from uil-release.pub)
-UIL_PUBKEY="untrusted comment: minisign public key 55B82536E176CFEA
-RWTqz3bhNiW4VV3XjzryJAU9CvAcFVpSe4+f9pc19R95zVCQaxJK0fV3"
+UIL_PUBKEY="RWQTcwJAcYq3bXcaPgyzjK9FU/q+5koJ2IlsjoNCdsPIQvDqOuw4FBR+"
 
 echo "$UIL_PUBKEY" > "${TMP_DIR}/uil.pub"
 
 echo "=> Verifying Minisign signature..."
-if ! minisign -V -p "${TMP_DIR}/uil.pub" \
+if ! minisign -V -P "${TMP_DIR}/uil.pub" \
               -m "${TMP_DIR}/archive.tar.gz" \
               -x "${TMP_DIR}/archive.minisig"; then
   echo "❌ Signature verification failed. Aborting."
