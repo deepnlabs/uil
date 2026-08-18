@@ -42,7 +42,7 @@ UIL_PUBKEY="RWQTcwJAcYq3bXcaPgyzjK9FU/q+5koJ2IlsjoNCdsPIQvDqOuw4FBR+"
 echo "$UIL_PUBKEY" > "${TMP_DIR}/uil.pub"
 
 echo "=> Verifying Minisign signature..."
-if ! minisign -V -P "${TMP_DIR}/uil.pub" \
+if ! minisign -V -p "${TMP_DIR}/uil.pub" \
               -m "${TMP_DIR}/archive.tar.gz" \
               -x "${TMP_DIR}/archive.minisig"; then
   echo "❌ Signature verification failed. Aborting."
