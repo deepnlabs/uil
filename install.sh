@@ -37,10 +37,15 @@ echo "=> Downloading signature: ${SIG_URL}"
 curl -sSL "$SIG_URL" -o "${TMP_DIR}/archive.minisig"
 
 # UIL Minisign public key (from uil-release.pub)
-UIL_PUBKEY="untrusted comment: minisign public key 6DB78A7140027313
-RWQTcwJAcYq3bXcaPgyzjK9FU/q+5koJ2IlsjoNCdsPIQvDqOuw4FBR+"
+#UIL_PUBKEY="untrusted comment: minisign public key 6DB78A7140027313
+#RWQTcwJAcYq3bXcaPgyzjK9FU/q+5koJ2IlsjoNCdsPIQvDqOuw4FBR+"
 
-echo "$UIL_PUBKEY" > "${TMP_DIR}/uil.pub"
+#echo "$UIL_PUBKEY" > "${TMP_DIR}/uil.pub"
+
+cat > "${TMP_DIR}/uil.pub" <<EOF
+untrusted comment: minisign public key 6DB78A7140027313
+RWQTcwJAcYq3bXcaPgyzjK9FU/q+5koJ2IlsjoNCdsPIQvDqOuw4FBR+
+EOF
 
 echo "=> Verifying Minisign signature..."
 if ! minisign -V -p "${TMP_DIR}/uil.pub" \
