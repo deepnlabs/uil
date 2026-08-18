@@ -120,7 +120,7 @@ After=network.target
 [Service]
 User=uild
 Group=uild
-ExecStart=/usr/local/bin/uild
+ExecStart=/usr/local/bin/uild run
 
 AmbientCapabilities=
 CapabilityBoundingSet=
