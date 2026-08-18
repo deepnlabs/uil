@@ -28,36 +28,59 @@ func NewLinuxHardwareDriver(maxTemp float64) *LinuxHardwareDriver {
 func (d *LinuxHardwareDriver) ID() string   { return "linux-sysfs-v1" }
 func (d *LinuxHardwareDriver) Name() string { return "Linux Sysfs Thermal & Interlock Monitor" }
 
-func (d *LinuxHardwareDriver) Initialize(ctx context.Context, config map[string]any) error {
-	// Verify thermal zone presence on host system
-	if _, err := os.Stat(d.thermalZonePath); os.IsNotExist(err) {
-		// Fallback search for alternative thermal zones on ARM/x86 SBCs
-		zones, _ := filepath.Glob("/sys/class/thermal/thermal_zone*/temp")
-		if len(zones) > 0 {
-			d.thermalZonePath = zones[0]
-		} else {
-			return fmt.Errorf("no valid sysfs thermal zone detected at %s", d.thermalZonePath)
-		}
-	}
-	return nil
-}
-
-// ReadCurrentTemperature parses raw millidegrees Celsius from Linux sysfs
+// ReadCurrentTemperature scans ALL thermal zones and returns the hottest valid one.
+// This works on Intel, AMD Ryzen AI, ARM SBCs, Jetson, and heterogeneous hardware.
 func (d *LinuxHardwareDriver) ReadCurrentTemperature() (float64, error) {
-	data, err := os.ReadFile(d.thermalZonePath)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read thermal sensor: %w", err)
-	}
+    zones, err := filepath.Glob("/sys/class/thermal/thermal_zone*/temp")
+    if err != nil || len(zones) == 0 {
+        return 20.0, fmt.Errorf("no thermal zones found")
+    }
 
-	rawStr := strings.TrimSpace(string(data))
-	rawMilli, err := strconv.ParseFloat(rawStr, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid thermal sensor payload: %w", err)
-	}
+    maxTemp := 0.0
 
-	// /sys/class/thermal outputs values in millidegrees (e.g., 42500 = 42.5°C)
-	return rawMilli / 1000.0, nil
+    for _, zone := range zones {
+        data, err := os.ReadFile(zone)
+        if err != nil {
+            continue
+        }
+
+        rawStr := strings.TrimSpace(string(data))
+        rawMilli, err := strconv.Atoi(rawStr)
+        if err != nil {
+            continue
+        }
+
+        tempC := float64(rawMilli) / 1000.0
+
+        // Filter out bogus zones
+        if tempC < 25.0 { // dummy zones (Intel/AMD zone0)
+            continue
+        }
+        if tempC > 120.0 { // invalid readings
+            continue
+        }
+
+        if tempC > maxTemp {
+            maxTemp = tempC
+        }
+    }
+
+    if maxTemp == 0.0 {
+        return 20.0, fmt.Errorf("no valid thermal zones")
+    }
+
+    return maxTemp, nil
 }
+
+// Initialize now simply verifies that at least one thermal zone exists.
+func (d *LinuxHardwareDriver) Initialize(ctx context.Context, config map[string]any) error {
+    zones, _ := filepath.Glob("/sys/class/thermal/thermal_zone*/temp")
+    if len(zones) == 0 {
+        return fmt.Errorf("no thermal zones found on system")
+    }
+    return nil
+}
+
 
 func (d *LinuxHardwareDriver) EvaluateInterlock(metrics map[string]float64) (bool, error) {
 	currentTemp, err := d.ReadCurrentTemperature()
