@@ -3,6 +3,7 @@ BINARY_NAME=uild
 BUILD_DIR=bin
 DIST_DIR=dist
 MAIN_SRC=cmd/uild/main.go
+UILCTL_SRC=cmd/uilctl/main.go
 PLUGIN_SRC=plugins_src/custom_interlock/main.go
 PLUGIN_OUT=plugins/custom_interlock.so
 
@@ -45,20 +46,28 @@ linux-armv6:
 	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/armv6/$(BINARY_NAME) $(MAIN_SRC)
 
 ## Build all cross-compilation binaries and create release tarballs in dist/
-dist: clean linux-amd64 linux-arm64 linux-armv6
+dist: clean linux-amd64 linux-arm64 linux-armv6 uilctl-amd64 uilctl-arm64 uilctl-armv6
 	@echo "==> Packaging release distribution tarballs in $(DIST_DIR)/..."
 	@mkdir -p $(DIST_DIR)
-	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(BUILD_DIR)/amd64 $(BINARY_NAME)
-	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz -C $(BUILD_DIR)/arm64 $(BINARY_NAME)
-	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-armv6.tar.gz -C $(BUILD_DIR)/armv6 $(BINARY_NAME)
+	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(BUILD_DIR)/amd64 $(BINARY_NAME) uilctl
+	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz -C $(BUILD_DIR)/arm64 $(BINARY_NAME) uilctl
+	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-armv6.tar.gz -C $(BUILD_DIR)/armv6 $(BINARY_NAME) uilctl
 	@echo "✅ Distribution release packages created in ./$(DIST_DIR):"
 	@ls -lh $(DIST_DIR)
+
+uilctl-amd64:
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/amd64/uilctl cmd/uilctl/main.go
+
+uilctl-arm64:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/arm64/uilctl cmd/uilctl/main.go
+
+uilctl-armv6:
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/armv6/uilctl cmd/uilctl/main.go
 
 ## Remove build artifacts and temporary files
 clean:
 	@echo "==> Cleaning build artifacts..."
-	@rm -rf $(BUILD_DIR) $(DIST_DIR) plugins/*.so /tmp/uild.sock
-	@rm -f /tmp/uild.sock 2>/dev/null || true
+	@rm -rf $(BUILD_DIR) $(DIST_DIR)
 
 help:
 	@echo "UIL-X Build System Targets:"
@@ -68,3 +77,9 @@ help:
 	@echo "  make linux-armv6   - Cross-compile static binary for Raspberry Pi Zero W"
 	@echo "  make dist          - Build all architectures and generate release tarballs"
 	@echo "  make clean         - Delete bin/, dist/, and plugin binaries"
+
+runtime-clean:
+	@echo "==> Cleaning runtime artifacts..."
+	@sudo rm -f /tmp/uild.sock 2>/dev/null || true
+	@sudo systemctl stop uild 2>/dev/null || true
+

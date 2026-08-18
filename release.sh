@@ -52,7 +52,12 @@ for file in "$DIST"/*.tar.gz; do
     echo "   ✔ Verified"
 done
 
-# 6. Create GitHub release
+# 6. Add SHA3-256
+sha3sum dist/uild-${VERSION}-linux-amd64.tar.gz > dist/uild-${VERSION}-linux-amd64.tar.gz.sha3
+sha3sum dist/uild-${VERSION}-linux-arm64.tar.gz > dist/uild-${VERSION}-linux-arm64.tar.gz.sha3
+sha3sum dist/uild-${VERSION}-linux-armv6.tar.gz > dist/uild-${VERSION}-linux-armv6.tar.gz.sha3
+
+# 7. Create GitHub release
 echo "✔ Creating GitHub release $VERSION"
 gh release create "$VERSION" "$DIST"/* \
     --title "UIL-X $VERSION" \
