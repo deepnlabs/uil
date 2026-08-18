@@ -6,7 +6,7 @@ MAIN_SRC=cmd/uild/main.go
 PLUGIN_SRC=plugins_src/custom_interlock/main.go
 PLUGIN_OUT=plugins/custom_interlock.so
 
-VERSION=v0.8.1-alpha
+VERSION=v0.8.1.2-alpha
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.GitCommit=$(COMMIT) -s -w"
 
