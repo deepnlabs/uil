@@ -46,7 +46,7 @@ linux-armv6:
 	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BUILD_DIR)/armv6/$(BINARY_NAME) $(MAIN_SRC)
 
 ## Build all cross-compilation binaries and create release tarballs in dist/
-dist: clean linux-amd64 linux-arm64 linux-armv6 uilctl-amd64 uilctl-arm64 uilctl-armv6
+dist: clean linux-amd64 linux-arm64 linux-armv6 uilctl-all
 	@echo "==> Packaging release distribution tarballs in $(DIST_DIR)/..."
 	@mkdir -p $(DIST_DIR)
 	@tar -czf $(DIST_DIR)/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(BUILD_DIR)/amd64 $(BINARY_NAME) uilctl
@@ -55,14 +55,20 @@ dist: clean linux-amd64 linux-arm64 linux-armv6 uilctl-amd64 uilctl-arm64 uilctl
 	@echo "✅ Distribution release packages created in ./$(DIST_DIR):"
 	@ls -lh $(DIST_DIR)
 
-uilctl-amd64:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/amd64/uilctl cmd/uilctl/main.go
+## Build uilctl for all architectures
+uilctl-all: $(BUILD_DIR)/amd64/uilctl $(BUILD_DIR)/arm64/uilctl $(BUILD_DIR)/armv6/uilctl
 
-uilctl-arm64:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/arm64/uilctl cmd/uilctl/main.go
+$(BUILD_DIR)/amd64/uilctl: ./cmd/uilctl/*.go
+	@mkdir -p $(BUILD_DIR)/amd64
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/amd64/uilctl ./cmd/uilctl
 
-uilctl-armv6:
-	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/armv6/uilctl cmd/uilctl/main.go
+$(BUILD_DIR)/arm64/uilctl: ./cmd/uilctl/*.go
+	@mkdir -p $(BUILD_DIR)/arm64
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/arm64/uilctl ./cmd/uilctl
+
+$(BUILD_DIR)/armv6/uilctl: ./cmd/uilctl/*.go
+	@mkdir -p $(BUILD_DIR)/armv6
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build -ldflags "-s -w" -o $(BUILD_DIR)/armv6/uilctl ./cmd/uilctl
 
 ## Remove build artifacts and temporary files
 clean:
