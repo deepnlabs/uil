@@ -1,15 +1,44 @@
 {
   "node_id": "deepn-node-2",
   "log_level": "info",
+
   "thermal_limit_celsius": 80.0,
+
   "ipc": {
     "enabled": true,
     "socket_path": "/tmp/uild.sock"
   },
+
   "mesh": {
     "enabled": true,
-    "port": 9090,
-    "broadcast_address": "255.255.255.255:9090"
+
+    // UIL mesh port (CDI uses 9090)
+    "port": 9091,
+
+    // Broadcast address for LAN-only discovery
+    "broadcast_address": "255.255.255.255:9091",
+
+    // Mesh HTTP API for uilctl
+    "api_port": 9410,
+
+    // Static peer list (LAN or Tailscale)
+    "peers": [
+      "100.70.130.62:9091",
+      "100.67.129.114:9091"
+    ],
+
+    // Future fields (ignored for now)
+    "encryption": {
+      "enabled": false,
+      "public_key": "",
+      "private_key": ""
+    },
+
+    "discovery": {
+      "mdns": false,
+      "bootstrap_node": ""
+    }
   },
+
   "plugins_dir": "/var/lib/uild/plugins"
 }
