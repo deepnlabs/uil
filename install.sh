@@ -121,7 +121,6 @@ After=network.target
 User=uild
 Group=uild
 ExecStart=/usr/local/bin/uild run
-WorkingDirectory=/home/rob/go/deepn-uil
 
 AmbientCapabilities=
 CapabilityBoundingSet=
