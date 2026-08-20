@@ -1,89 +1,102 @@
 package bridge
 
 import (
-	"encoding/json"
-	"fmt"
-	"net"
-	"os"
-	"sync"
+    "encoding/json"
+    "fmt"
+    "net"
+    "os"
+    "path/filepath"
+    "sync"
 )
 
-const SocketPath = "/tmp/uild.sock"
-
 type SafetyEvent struct {
-	InterlockID string             `json:"interlock_id"`
-	Breach      bool               `json:"breach"`
-	Timestamp   int64              `json:"timestamp"`
-	Metrics     map[string]float64 `json:"metrics"`
+    InterlockID string             `json:"interlock_id"`
+    Breach      bool               `json:"breach"`
+    Timestamp   int64              `json:"timestamp"`
+    Metrics     map[string]float64 `json:"metrics"`
 }
 
 type BridgeEmitter struct {
-	listener net.Listener
-	conns    map[net.Conn]bool
-	mu       sync.Mutex
+    socketPath string
+    listener   net.Listener
+    conns      map[net.Conn]bool
+    mu         sync.Mutex
 }
 
-func NewBridgeEmitter() (*BridgeEmitter, error) {
-	_ = os.Remove(SocketPath)
+func NewBridgeEmitter(socketPath string) (*BridgeEmitter, error) {
+    // Ensure directory exists
+    dir := filepath.Dir(socketPath)
+    if err := os.MkdirAll(dir, 0750); err != nil {
+        return nil, fmt.Errorf("failed to create socket directory: %w", err)
+    }
 
-	l, err := net.Listen("unix", SocketPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to bind socket at %s: %w", SocketPath, err)
-	}
+    // Remove any pre-existing socket (symlink attack protection)
+    if _, err := os.Stat(socketPath); err == nil {
+        os.Remove(socketPath)
+    }
 
-	_ = os.Chmod(SocketPath, 0666)
+    // Bind Unix socket
+    l, err := net.Listen("unix", socketPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to bind socket at %s: %w", socketPath, err)
+    }
 
-	emitter := &BridgeEmitter{
-		listener: l,
-		conns:    make(map[net.Conn]bool),
-	}
+    // Secure permissions
+    os.Chmod(socketPath, 0600)
 
-	// Accept incoming subscriber connections in background goroutine
-	go emitter.acceptLoop()
+    emitter := &BridgeEmitter{
+        socketPath: socketPath,
+        listener:   l,
+        conns:      make(map[net.Conn]bool),
+    }
 
-	return emitter, nil
+    // Accept incoming subscriber connections
+    go emitter.acceptLoop()
+
+    return emitter, nil
 }
 
 func (b *BridgeEmitter) acceptLoop() {
-	for {
-		conn, err := b.listener.Accept()
-		if err != nil {
-			return
-		}
+    for {
+        conn, err := b.listener.Accept()
+        if err != nil {
+            return
+        }
 
-		b.mu.Lock()
-		b.conns[conn] = true
-		b.mu.Unlock()
-	}
+        b.mu.Lock()
+        b.conns[conn] = true
+        b.mu.Unlock()
+    }
 }
 
 func (b *BridgeEmitter) BroadcastBreach(event SafetyEvent) {
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return
-	}
-	payload = append(payload, '\n')
+    payload, err := json.Marshal(event)
+    if err != nil {
+        return
+    }
+    payload = append(payload, '\n')
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
+    b.mu.Lock()
+    defer b.mu.Unlock()
 
-	for conn := range b.conns {
-		_, err := conn.Write(payload)
-		if err != nil {
-			conn.Close()
-			delete(b.conns, conn)
-		}
-	}
+    for conn := range b.conns {
+        _, err := conn.Write(payload)
+        if err != nil {
+            conn.Close()
+            delete(b.conns, conn)
+        }
+    }
 }
 
 func (b *BridgeEmitter) Close() {
-	if b.listener != nil {
-		b.listener.Close()
-		_ = os.Remove(SocketPath)
-	}
-	b.mu.Lock()
-	for conn := range b.conns {
-		conn.Close()
-	}
-	b.mu.Unlock()
+    if b.listener != nil {
+        b.listener.Close()
+        _ = os.Remove(b.socketPath)
+    }
+
+    b.mu.Lock()
+    for conn := range b.conns {
+        conn.Close()
+    }
+    b.mu.Unlock()
 }

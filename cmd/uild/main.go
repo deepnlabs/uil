@@ -32,35 +32,59 @@ type Config struct {
     ThermalLimitCelsius float64    `json:"thermal_limit_celsius"`
     Mesh                MeshConfig `json:"mesh"`
     PluginsDir          string     `json:"plugins_dir"`
+    PluginsEnabled      bool       `json:"plugins_enabled"`
 }
 
 func loadConfig() Config {
-    f, err := os.Open("config/config.json")
+    const configPath = "/etc/uil/config.json"
+
+    f, err := os.Open(configPath)
     if err != nil {
-        // fallback defaults if config missing
+        fmt.Printf("⚠️  Config file not found at %s, using defaults\n", configPath)
         return Config{
             NodeID:              "uil-node",
             ThermalLimitCelsius: 80.0,
             Mesh: MeshConfig{
-                Enabled:          true,
+                Enabled:          false,
                 Port:             9091,
                 BroadcastAddress: "255.255.255.255:9091",
                 APIPort:          9410,
                 Peers:            []string{},
             },
-            PluginsDir: "./plugins",
+            PluginsDir:     "/var/lib/uild/plugins",
+            PluginsEnabled: false,
         }
     }
     defer f.Close()
 
     var cfg Config
-    _ = json.NewDecoder(f).Decode(&cfg)
+    if err := json.NewDecoder(f).Decode(&cfg); err != nil {
+        fmt.Printf("⚠️  Config decode failed: %v — using defaults\n", err)
+        return Config{
+            NodeID:              "uil-node",
+            ThermalLimitCelsius: 80.0,
+            Mesh: MeshConfig{
+                Enabled:          false,
+                Port:             9091,
+                BroadcastAddress: "255.255.255.255:9091",
+                APIPort:          9410,
+                Peers:            []string{},
+            },
+            PluginsDir:     "/var/lib/uild/plugins",
+            PluginsEnabled: false,
+        }
+    }
+
     if cfg.Mesh.Port == 0 {
         cfg.Mesh.Port = 9091
     }
     if cfg.Mesh.APIPort == 0 {
         cfg.Mesh.APIPort = 9410
     }
+    if cfg.PluginsDir == "" {
+        cfg.PluginsDir = "/var/lib/uild/plugins"
+    }
+
     return cfg
 }
 
@@ -74,25 +98,45 @@ func main() {
 
     switch command {
     case "init":
-        fmt.Println("Initializing UIL-X runtime configuration at /etc/uild/config.json...")
+        fmt.Println("Initializing UIL-X runtime configuration at /etc/uil/config.json...")
         fmt.Println("Creating state directories at /var/lib/uild/plugins...")
         fmt.Println("Initialization complete.")
 
     case "run":
         cfg := loadConfig()
 
-        // Load persistent node identity FIRST
-        nodeID, _ := mesh.LoadOrCreateIdentity()
+        // Load persistent node identity (ID + keypair)
+        id, err := mesh.LoadOrCreateIdentity()
+        if err != nil {
+            fmt.Printf("Failed to load node identity: %v\n", err)
+            os.Exit(1)
+        }
+        nodeID := id.NodeID
         fmt.Printf("Starting UIL-X Hardware Governance Daemon (`uild`) v0.8-alpha on [%s]...\n", nodeID)
 
         ctx, cancel := context.WithCancel(context.Background())
         defer cancel()
 
-        // 1. Local Unix Socket Bridge
-        socketBridge, _ := bridge.NewBridgeEmitter()
-        if socketBridge != nil {
-            defer socketBridge.Close()
-            fmt.Println("  └─ [IPC BRIDGE] Listening on Unix socket /tmp/uild.sock")
+        // 1. Local Unix Socket Bridge (secure)
+        socketPath := "/run/uild/uild.sock"
+        var socketBridge *bridge.BridgeEmitter
+
+        if err := os.MkdirAll("/run/uild", 0750); err != nil {
+            fmt.Printf("  └─ [IPC BRIDGE] Failed to create /run/uild: %v\n", err)
+        } else {
+            if _, err := os.Stat(socketPath); err == nil {
+                _ = os.Remove(socketPath)
+            }
+
+            socketBridge, err = bridge.NewBridgeEmitter(socketPath)
+            if err != nil {
+                fmt.Printf("  └─ [IPC BRIDGE] Failed to start: %v\n", err)
+                socketBridge = nil
+            } else {
+                defer socketBridge.Close()
+                _ = os.Chmod(socketPath, 0600)
+                fmt.Printf("  └─ [IPC BRIDGE] Listening on Unix socket %s\n", socketPath)
+            }
         }
 
         // 2. Mesh Network UDP Gossip
@@ -100,8 +144,14 @@ func main() {
         if cfg.Mesh.Enabled {
             nm, err := mesh.NewNodeMesh(cfg.Mesh.Port, cfg.Mesh.Peers, func(remoteEnv uil.UILEnvelope) {
                 if remoteEnv.ImportanceScore >= 0.9 {
+                    proof := remoteEnv.ProofCommitment
+                    if len(proof) < 12 {
+                        fmt.Printf("\n🚨 [REMOTE MESH ALERT] Malformed proof from [%s] — dropping packet\n",
+                            remoteEnv.SourceNode)
+                        return
+                    }
                     fmt.Printf("\n🚨 [REMOTE MESH ALERT] High-priority interlock breach from [%s]! SHA3: %s\n",
-                        remoteEnv.SourceNode, remoteEnv.ProofCommitment[:12])
+                        remoteEnv.SourceNode, proof[:12])
                 }
             })
             if err != nil {
@@ -112,12 +162,11 @@ func main() {
                 meshNetwork.Start(ctx)
                 fmt.Printf("  └─ [MESH NETWORK] UDP Peer Discovery Active on Port %d\n", cfg.Mesh.Port)
 
-                // Mesh HTTP API for uilctl mesh peers
                 go func() {
                     http.HandleFunc("/mesh/peers", func(w http.ResponseWriter, r *http.Request) {
                         peers := meshNetwork.GetActivePeers()
                         w.Header().Set("Content-Type", "application/json")
-                        json.NewEncoder(w).Encode(peers)
+                        _ = json.NewEncoder(w).Encode(peers)
                     })
                     addr := fmt.Sprintf("127.0.0.1:%d", cfg.Mesh.APIPort)
                     _ = http.ListenAndServe(addr, nil)
@@ -131,16 +180,24 @@ func main() {
         if err := nativeDriver.Initialize(ctx, nil); err == nil {
             drivers = append(drivers, nativeDriver)
             fmt.Printf("  └─ [NATIVE] Registered %s (%s)\n", nativeDriver.Name(), nativeDriver.ID())
+        } else {
+            fmt.Printf("  └─ [NATIVE] Failed to initialize native driver: %v\n", err)
         }
 
-        // Load Dynamic Plugins
-        files, _ := filepath.Glob(cfg.PluginsDir + "/*.so")
-        for _, file := range files {
-            drv, err := substrate.LoadPlugin(file)
-            if err == nil && drv.Initialize(ctx, nil) == nil {
-                drivers = append(drivers, drv)
-                fmt.Printf("  └─ [PLUGIN] Loaded %s (%s)\n", drv.Name(), drv.ID())
+        // Load Dynamic Plugins (opt-in)
+        if cfg.PluginsEnabled {
+            files, _ := filepath.Glob(cfg.PluginsDir + "/*.so")
+            for _, file := range files {
+                drv, err := substrate.LoadPlugin(file)
+                if err == nil && drv.Initialize(ctx, nil) == nil {
+                    drivers = append(drivers, drv)
+                    fmt.Printf("  └─ [PLUGIN] Loaded %s (%s)\n", drv.Name(), drv.ID())
+                } else if err != nil {
+                    fmt.Printf("  └─ [PLUGIN] Failed to load plugin %s: %v\n", file, err)
+                }
             }
+        } else {
+            fmt.Println("  └─ [PLUGIN] Dynamic plugins disabled by config")
         }
 
         // 4. Signal Interception
@@ -172,7 +229,6 @@ func main() {
                     }
                 }
 
-                // Local IPC Broadcast
                 if socketBridge != nil {
                     socketBridge.BroadcastBreach(bridge.SafetyEvent{
                         InterlockID: "local-aggregate",
@@ -182,10 +238,9 @@ func main() {
                     })
                 }
 
-                // Compute SHA3 State Commitment
                 env := uil.NewEnvelope(nodeID, "broadcast", uil.SubstrateAuto, map[string]interface{}{
-                    "cpu_temp": liveMetrics["cpu_temp_celsius"],
-                    "breach":   anyBreach,
+                    "cpu_temp":  liveMetrics["cpu_temp_celsius"],
+                    "breach":    anyBreach,
                     "mesh_port": cfg.Mesh.Port,
                 })
                 hash, _ := hasher.HashPayload(env.Payload)
@@ -197,15 +252,19 @@ func main() {
                     env.ImportanceScore = 0.1
                 }
 
-                // Broadcast state over P2P mesh
+                shortHash := hash
+                if len(shortHash) >= 12 {
+                    shortHash = shortHash[:12]
+                }
+
                 if meshNetwork != nil {
                     _ = meshNetwork.BroadcastGossip(env)
                     peers := meshNetwork.GetActivePeers()
                     fmt.Printf("[%s] Tick | Temp: %.1f°C | Mesh Peers: %d | SHA3: %s\n",
-                        time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], len(peers), hash[:12])
+                        time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], len(peers), shortHash)
                 } else {
                     fmt.Printf("[%s] Tick | Temp: %.1f°C | Mesh Peers: N/A | SHA3: %s\n",
-                        time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], hash[:12])
+                        time.Now().Format("15:04:05"), liveMetrics["cpu_temp_celsius"], shortHash)
                 }
             }
         }

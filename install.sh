@@ -118,21 +118,34 @@ Description=UIL-X Hardware Governance Daemon
 After=network.target
 
 [Service]
+Type=simple
+
+# Run as a dedicated non-root user
 User=uild
 Group=uild
+
+# Create secure runtime directory for IPC socket
+RuntimeDirectory=uild
+RuntimeDirectoryMode=0750
+
+# Working directory (important for relative paths)
+WorkingDirectory=/var/lib/uild
+
+# Exec command
 ExecStart=/usr/local/bin/uild run
 
-AmbientCapabilities=
-CapabilityBoundingSet=
+# Restart policy
+Restart=on-failure
+RestartSec=3
+
+# Capability drop (extra hardening)
 NoNewPrivileges=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
-PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

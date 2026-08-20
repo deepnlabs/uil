@@ -2,11 +2,19 @@ package substrate
 
 import "context"
 
-// SubstrateDriver defines the interface that all hardware modules (open-source or proprietary) must fulfill.
+// Versioned driver interface for safety‑critical operation.
+const SubstrateAPIVersion = 1
+
 type SubstrateDriver interface {
-	ID() string
-	Name() string
-	Initialize(ctx context.Context, config map[string]any) error
-	EvaluateInterlock(metrics map[string]float64) (bool, error) // Returns true if safety breached
-	Shutdown(ctx context.Context) error
+    // Metadata
+    ID() string
+    Name() string
+
+    // Version compliance
+    APIVersion() int
+
+    // Lifecycle
+    Initialize(ctx context.Context, config map[string]any) error
+    EvaluateInterlock(metrics map[string]float64) (bool, error)
+    Shutdown(ctx context.Context) error
 }

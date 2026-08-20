@@ -1,31 +1,26 @@
 {
-  "node_id": "deepn-node-2",
+  "node_id": "deepn_labs",
   "log_level": "info",
 
   "thermal_limit_celsius": 80.0,
 
   "ipc": {
     "enabled": true,
-    "socket_path": "/tmp/uild.sock"
+    "socket_path": "/run/uild/uild.sock"
   },
 
   "mesh": {
     "enabled": true,
 
-    // UIL mesh port (CDI uses 9090)
     "port": 9091,
 
-    // Broadcast address for LAN-only discovery
     "broadcast_address": "255.255.255.255:9091",
 
-    // Mesh HTTP API for uilctl
     "api_port": 9410,
 
-    // Static peer list (LAN or Tailscale)
     "peers": [
     ],
 
-    // Future fields (ignored for now)
     "encryption": {
       "enabled": false,
       "public_key": "",
@@ -39,4 +34,9 @@
   },
 
   "plugins_dir": "/var/lib/uild/plugins"
+
+}
+
+if err := json.NewDecoder(f).Decode(&cfg); err != nil {
+    return fmt.Errorf("config decode failed: %w", err)
 }

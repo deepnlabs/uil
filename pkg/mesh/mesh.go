@@ -2,6 +2,7 @@ package mesh
 
 import (
     "context"
+    "crypto/ed25519"
     "encoding/json"
     "fmt"
     "log"
@@ -9,6 +10,7 @@ import (
     "sync"
     "time"
 
+    "github.com/deepnlabs/uil/pkg/crypto"
     "github.com/deepnlabs/uil/pkg/uil"
 )
 
@@ -28,7 +30,11 @@ type NodeMesh struct {
     mu         sync.RWMutex
     onEnvelope func(env uil.UILEnvelope)
 
-    configuredPeers []string // static peer list from config
+    configuredPeers []string
+
+    // Cryptographic identity
+    publicKey  ed25519.PublicKey
+    privateKey ed25519.PrivateKey
 }
 
 type MeshRuntime struct {
@@ -49,7 +55,7 @@ func StartMesh(port int, peers []string, handler func(env uil.UILEnvelope)) (*Me
 }
 
 func NewNodeMesh(port int, peers []string, handler func(env uil.UILEnvelope)) (*NodeMesh, error) {
-    nodeID, err := LoadOrCreateIdentity()
+    id, err := LoadOrCreateIdentity()
     if err != nil {
         return nil, fmt.Errorf("failed to load node identity: %w", err)
     }
@@ -69,12 +75,14 @@ func NewNodeMesh(port int, peers []string, handler func(env uil.UILEnvelope)) (*
     }
 
     mesh := &NodeMesh{
-        nodeID:         nodeID,
+        nodeID:         id.NodeID,
         port:           port,
         conn:           conn,
         peers:          make(map[string]*PeerInfo),
         onEnvelope:     handler,
         configuredPeers: peers,
+        publicKey:      id.PublicKey,
+        privateKey:     id.PrivateKey,
     }
 
     return mesh, nil
@@ -105,11 +113,28 @@ func (m *NodeMesh) listenLoop(ctx context.Context) {
                 continue
             }
 
+            // Ignore self-origin packets
             if env.SourceNode == m.nodeID {
                 continue
             }
 
+            // Basic sanity checks
+            if env.SourceNode == "" || env.Payload == nil {
+                continue
+            }
+
+            // Structural validation
+            if err := env.Validate(); err != nil {
+                continue
+            }
+
+            // Verify envelope signature (cluster key for now)
+            if !crypto.VerifyEnvelope(&env, m.publicKey) {
+                continue
+            }
+
             m.updatePeer(env, remoteAddr)
+
             if m.onEnvelope != nil {
                 m.onEnvelope(env)
             }
@@ -137,12 +162,18 @@ func (m *NodeMesh) dialPeers(ctx context.Context) {
     for _, addr := range m.configuredPeers {
         go func(addr string) {
             for {
-                conn, err := net.Dial("udp", addr)
-                if err == nil {
-                    m.sendHello(conn)
-                    m.sendHeartbeat(conn)
+                select {
+                case <-ctx.Done():
+                    return
+                default:
+                    conn, err := net.Dial("udp", addr)
+                    if err == nil {
+                        m.sendHello(conn)
+                        m.sendHeartbeat(conn)
+                        conn.Close()
+                    }
+                    time.Sleep(5 * time.Second)
                 }
-                time.Sleep(5 * time.Second)
             }
         }(addr)
     }
@@ -152,6 +183,9 @@ func (m *NodeMesh) sendHello(conn net.Conn) {
     env := uil.NewEnvelope(m.nodeID, "hello", uil.SubstrateAuto, map[string]interface{}{
         "mesh_port": m.port,
     })
+    // Sign envelope before sending
+    _ = crypto.SignEnvelope(env, m.privateKey)
+
     data, _ := json.Marshal(env)
     conn.Write(data)
 }
@@ -160,6 +194,9 @@ func (m *NodeMesh) sendHeartbeat(conn net.Conn) {
     env := uil.NewEnvelope(m.nodeID, "heartbeat", uil.SubstrateAuto, map[string]interface{}{
         "mesh_port": m.port,
     })
+    // Sign envelope before sending
+    _ = crypto.SignEnvelope(env, m.privateKey)
+
     data, _ := json.Marshal(env)
     conn.Write(data)
 }
@@ -169,12 +206,14 @@ func (m *NodeMesh) BroadcastGossip(env *uil.UILEnvelope) error {
         return nil
     }
 
+    // Sign envelope before broadcasting
+    _ = crypto.SignEnvelope(env, m.privateKey)
+
     data, err := json.Marshal(env)
     if err != nil {
         return err
     }
 
-    // Broadcast to LAN
     dst, err := net.ResolveUDPAddr("udp", fmt.Sprintf("255.255.255.255:%d", m.port))
     if err != nil {
         return err
