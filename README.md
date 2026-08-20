@@ -53,6 +53,14 @@ UIL‑X is built for environments where hardware control, telemetry, and distrib
 - Loaded under non‑root sandbox
 - Safe for distributed environments
 
+UIL v0.9 Rewrite (In Progress)
+
+The current version of UIL lives in the root directory.
+
+The next major version (v0.9) is being developed in /v0.9/ as a clean rewrite with a minimal core and plugin ecosystem.
+
+v0.8.1.7 will remain available for legacy users.
+
 ---
 
 ## Installation
@@ -61,3 +69,6 @@ To install the latest verified release:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/deepnlabs/uil/main/install.sh | bash
+
+
+
