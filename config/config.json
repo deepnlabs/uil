@@ -23,8 +23,6 @@
 
     // Static peer list (LAN or Tailscale)
     "peers": [
-      "100.70.130.62:9091",
-      "100.67.129.114:9091"
     ],
 
     // Future fields (ignored for now)

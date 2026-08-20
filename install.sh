@@ -58,8 +58,8 @@ curl -sSL "$SHA3_URL" -o "${TMP_DIR}/archive.tar.gz.sha3"
 
 # UIL Minisign public key (from uil-release.key.pub)
 cat > "${TMP_DIR}/uil.pub" <<EOF
-untrusted comment: minisign public key 6DB78A7140027313
-RWQTcwJAcYq3bXcaPgyzjK9FU/q+5koJ2IlsjoNCdsPIQvDqOuw4FBR+
+untrusted comment: minisign public key 2AA63A801C42F2FD
+RWT98kIcgDqmKjZOGcy6zrD3SV9ckm37CxFudz7Rkef9aAOXGjsk6i4u
 EOF
 
 echo "=> Verifying Minisign signature..."

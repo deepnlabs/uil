@@ -19,7 +19,7 @@ UIL‑X is built for environments where hardware control, telemetry, and distrib
 
 ### ✔ Secure Daemon (`uild`)
 - Runs under a locked‑down system user (`uild`)
-- No root privileges required
+- No root privileges required after install
 - Strict systemd sandboxing
 - No kernel module access
 - No device access
@@ -59,7 +59,7 @@ The current version of UIL lives in the root directory.
 
 The next major version (v0.9) is being developed in /v0.9/ as a clean rewrite with a minimal core and plugin ecosystem.
 
-v0.8.1.7 will remain available for legacy users.
+v0.8.1.8 will remain available for legacy users.
 
 ---
 

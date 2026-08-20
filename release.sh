@@ -2,7 +2,7 @@
 set -e
 
 VERSION="$1"
-KEY="uil-release.key"
+KEY="../release/uil-release.key"
 PUB="uil-release.key.pub"
 DIST="dist"
 
