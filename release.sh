@@ -3,7 +3,7 @@ set -e
 
 VERSION="$1"
 KEY="../release/uil-release.key"
-PUB="uil-release.key.pub"
+PUB="../uil-release.key.pub"
 DIST="dist"
 
 if [[ -z "$VERSION" ]]; then
